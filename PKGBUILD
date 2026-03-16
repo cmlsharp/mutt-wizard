@@ -1,5 +1,5 @@
 pkgname=mutt-wizard-oauth-git
-pkgver=3.3.1.r163.g00b86f6
+pkgver=3.3.1.r164.g536f032
 pkgrel=1
 pkgdesc="mutt-wizard with OAuth2 support and systemd mailsync timer"
 arch=('any')
