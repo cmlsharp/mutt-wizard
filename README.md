@@ -34,9 +34,14 @@ Specifically, this wizard:
 - `curl` - tests connections (required at install).
 - `isync` - downloads and syncs the mail (required if storing IMAP mail locally).
 - `msmtp` - sends the email.
-- `pass` - safely encrypts passwords (required at install).
+- `pass` - safely encrypts passwords (required at install for password-based accounts).
 - `ca-certificates` - required for SSL. Probably installed already.
 - `gettext` - writes config files. Probably installed already.
+
+For OAuth2 accounts (`-O` flag), instead of `pass` you will need:
+- `neomutt` must include `/usr/share/neomutt/oauth2/mutt_oauth2.py` (included in standard neomutt packages).
+- `cyrus-sasl-xoauth2` - SASL plugin required for mbsync OAuth2 (AUR: `cyrus-sasl-xoauth2-git`). Not needed if using online-only mode (`-o`).
+- A Google Cloud or Microsoft OAuth2 **Client ID** and **Client Secret**.
 
 **Note**: There's a chance of errors if you use a slow-release distro like
 Ubuntu, Debian, or Mint. If you get errors in `neomutt`, install the most
@@ -67,8 +72,7 @@ A user of Arch-based distros can also install the current mutt-wizard release fr
 - `abook` - a terminal-based address book. Pressing tab while typing an address
   to send mail to will suggest contacts that are in your abook.
 - `urlview` - outputs urls in mail to browser.
-- `cronie` - (or any other major cronjob manager) to set up automatic mail
-  syncing.
+- `systemd` - for automatic mail syncing via user timers (used by `mw -t`/`mw -T`).
 - `mpop` - If you want to use POP protocol instead of IMAP.
 
 
@@ -78,10 +82,11 @@ The mutt-wizard runs via the command `mw`. Once setup is complete, you'll use
 `neomutt` to access your mail.
 
 - `mw -a you@email.com` -- add a new email account
+- `mw -a you@email.com -O` -- add an account using OAuth2 (for Gmail/Outlook)
 - `mw -l` -- list existing accounts
 - `mw -d` -- choose an account to delete
 - `mw -D your@email.com` -- delete account settings without confirmation
-- `mw -t 30` -- toggle automatic mailsync to every 30 minutes
+- `mw -t 30` -- toggle automatic mailsync every 30 minutes (systemd timer)
 - `mw -T` -- toggle mailsync without specifying minutes (default is 10)
 - `mw -r` -- reorder account shortcut numbers
 - `pass edit mw-your@email.com` -- revise an account's password
@@ -108,6 +113,10 @@ The mutt-wizard runs via the command `mw`. Once setup is complete, you'll use
 - `-f` -- Assume mailbox names and force account configuration without
   connecting online at all.
 - `-o` -- Configure mutt for an account, but do not keep mail offline.
+- `-O` -- Use OAuth2 authentication instead of a password. Required for
+  providers like Gmail/Outlook that use SSO (e.g. Okta) and don't support app
+  passwords. You will be prompted for your OAuth2 Client ID and Client Secret,
+  then a browser will open for authorization. Tokens are stored GPG-encrypted.
 - `-p` -- Use POP protocol instead of IMAP (requires `mpop` installed).
 - `mailsync` gives visual messages of new mail by default. Or, set
   `MAILSYNC_MUTE=1` as an environmental variable if you prefer not having them.
@@ -182,6 +191,9 @@ systemctl enable --user goimapnotify@fulladdrs.service
 - Addition of a manual `man mw`
 - Now handles POP protocol via `mpop` for those who prefer it (add an account
   with the `-p` option). POP configs are still generated automatically.
+- OAuth2 support for Gmail and Outlook accounts via `-O`, enabling use with
+  SSO providers (Okta, etc.) where app passwords are unavailable.
+- Automatic mail syncing now uses systemd user timers instead of cron.
 
 ## Help the Project!
 
@@ -210,18 +222,20 @@ systemctl enable --user goimapnotify@fulladdrs.service
 
 ## Watch out for these things
 
-- Gmail accounts need to create an
-  [App Password](https://support.google.com/accounts/answer/185833?hl=en) to
-  use with  "less secure" applications. This password is single-use (i.e.
-  for setup) and will be stored and encrypted locally. Enabling third-party
-  applications requires turning off two-factor authentication and this will
-  circumvent that. You might also need to manually "Enable IMAP" in the
-  settings.
-  To create an App Password for your Google account,
-  you can directly visit the [App Passwords](https://myaccount.google.com/apppasswords) page in your Google Account settings.
+- **Gmail with app passwords**: If your Google account supports app passwords,
+  create one at [App Passwords](https://myaccount.google.com/apppasswords) and
+  use it as the account password during setup.
+- **Gmail/Outlook with SSO (Okta, etc.)**: If your account uses SSO and you
+  cannot generate app passwords, use the `-O` flag for OAuth2 authentication.
+  You will need to create an OAuth2 app in [Google Cloud
+  Console](https://console.cloud.google.com/) (APIs & Services > Credentials >
+  OAuth 2.0 Client ID, type "Desktop app") with the
+  `https://mail.google.com/` scope. If your organization's admin creates it as
+  an "Internal" app, your refresh token will never expire. Otherwise (External /
+  testing mode), you will need to re-authorize every 7 days.
 - If you have a university email or enterprise-hosted email for work, there
   might be other hurdles or two-factor authentication you have to jump through.
-  Some, for example, will want you to create a separate IMAP password, etc.
+  The `-O` OAuth2 flag is specifically designed for these cases.
 - `isync` is not fully UTF-8 compatible, so non-Latin characters may be garbled
   (although sync should succeed). `mw` will also not auto-create mailbox
   shortcuts since it is looking for English mailbox names. I strongly recommend

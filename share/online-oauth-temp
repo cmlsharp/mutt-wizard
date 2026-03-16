@@ -1,0 +1,5 @@
+set imap_user = "$login"
+set imap_authenticators = "oauthbearer:xoauth2"
+set imap_oauth_refresh_command = "python3 $oauth2script $oauth2tokenfile"
+set ssl_starttls = yes
+set ssl_force_tls = yes

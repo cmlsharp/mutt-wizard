@@ -1,0 +1,11 @@
+account $fulladdr
+host $smtp
+port $sport
+from $fulladdr
+user $login
+passwordeval "python3 $oauth2script $oauth2tokenfile"
+auth xoauth2
+tls on
+tls_trust_file	$sslcert
+logfile $msmtplog
+$tlsline

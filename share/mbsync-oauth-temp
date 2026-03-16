@@ -2,8 +2,8 @@ IMAPStore $fulladdr-remote
 Host $imap
 Port $iport
 User $login
-PassCmd "pass $passprefix$fulladdr"
-AuthMechs LOGIN
+PassCmd "python3 $oauth2script $oauth2tokenfile"
+AuthMechs XOAUTH2
 TLSType $imapssl
 CertificateFile $sslcert
 

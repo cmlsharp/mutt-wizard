@@ -1,0 +1,16 @@
+{
+    "host": "$imap",
+    "port": $iport,
+    "tls": true,
+    "tlsOptions": {
+            "rejectUnauthorized": false
+    },
+    "username": "$login",
+    "password": "",
+    "passwordCmd": "python3 $oauth2script $oauth2tokenfile",
+    "xoauth2": true,
+    "onNewMail": "mailsync",
+    "onNewMailPost": "",
+    "boxes": [ "INBOX" ]
+}
+

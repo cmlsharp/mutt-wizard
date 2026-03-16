@@ -28,6 +28,8 @@ sport="465"
 imapssl="IMAPS"
 tlsline="tls_starttls off"
 maxmes="0"
+oauth2dir="${XDG_DATA_HOME:-$HOME/.local/share}/mutt-wizard/oauth2"
+oauth2script="${MUTT_OAUTH2_SCRIPT:-/usr/share/neomutt/oauth2/mutt_oauth2.py}"
 
 alias mbsync='mbsync -c "$mbsyncrc"'
 
@@ -56,12 +58,27 @@ done || { echo "CA Certificate not found. Please install one or link it to /etc/
 
 checkbasics() {
 	command -V gpg >/dev/null 2>&1 && GPG="gpg" || GPG="gpg2"
-	PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR:-$HOME/.password-store}"
-	[ -r "$PASSWORD_STORE_DIR/.gpg-id" ] || {
-		echo "First run \`pass init <yourgpgemail>\` to set up a password archive."
-		echo "(If you don't already have a GPG key pair, first run \`$GPG --full-generate-key\`.)"
-		exit 1
-	}
+	if [ -z "${oauth2+x}" ]; then
+		PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR:-$HOME/.password-store}"
+		[ -r "$PASSWORD_STORE_DIR/.gpg-id" ] || {
+			echo "First run \`pass init <yourgpgemail>\` to set up a password archive."
+			echo "(If you don't already have a GPG key pair, first run \`$GPG --full-generate-key\`.)"
+			exit 1
+		}
+	else
+		[ -x "$oauth2script" ] || [ -f "$oauth2script" ] || {
+			echo "mutt_oauth2.py not found at $oauth2script"
+			echo "Install neomutt or set MUTT_OAUTH2_SCRIPT to the correct path."
+			exit 1
+		}
+		if [ "$type" != "online" ]; then
+			find /usr/lib/sasl2 /usr/lib64/sasl2 /usr/local/lib/sasl2 -name "*xoauth2*" 2>/dev/null | grep -q . || {
+				echo "WARNING: cyrus-sasl-xoauth2 not found. mbsync requires it for OAuth2."
+				echo "Install it (AUR: cyrus-sasl-xoauth2-git) or use -o for online-only mode."
+				exit 1
+			}
+		fi
+	fi
 }
 
 getaccounts() { accounts="$(find -L "$accdir" -type f 2>/dev/null | grep -o "\S*.muttrc" | sed "s|.*/\([0-9]-\)*||;s/\.muttrc$//" | nl)"; }
@@ -101,6 +118,12 @@ prepmutt() {
 
 getprofiles() {
 	safename="$(echo $fulladdr | sed 's/@/_/g')"
+	if [ -n "${oauth2+x}" ]; then
+		mbsynctemp="$muttshare/mbsync-oauth-temp"
+		msmtptemp="$muttshare/msmtp-oauth-temp"
+		onlinetemp="$muttshare/online-oauth-temp"
+		imapnotifytemp="$muttshare/imapnotify-oauth-temp"
+	fi
 	case "$type" in
 	online)
 		folder="imaps://$login@$imap:$iport"
@@ -160,6 +183,7 @@ delete() {
 	sed -ibu "/account $fulladdr$/,/^\(\s*$\|account\)/d" "$mpoprc" 2>/dev/null
 	rm -f "$mpoprc"bu
 	pass rm -f "$passprefix$fulladdr" >/dev/null 2>&1
+	rm -f "$oauth2dir/$fulladdr.tokens"
 	[ -n "${purge+x}" ] && safename="$(echo $fulladdr | sed 's/@/_/g')" && rm -rf "${cachedir:?}/${safename:?}" "${maildir:?}/${fulladdr:?}"
 }
 
@@ -186,15 +210,46 @@ askinfo() {
 	[ -z "$passprefix" ] && passprefix=""
 	hostname="${fulladdr#*@}"
 	login="${login:-$fulladdr}"
-	if [ -n "${password+x}" ] && [ ! -f "$PASSWORD_STORE_DIR/$passprefix$fulladdr.gpg" ]; then
-		insertpass
-	elif [ ! -f "$PASSWORD_STORE_DIR/$passprefix$fulladdr.gpg" ]; then
-		getpass
-    fi
+	if [ -z "${oauth2+x}" ]; then
+		if [ -n "${password+x}" ] && [ ! -f "$PASSWORD_STORE_DIR/$passprefix$fulladdr.gpg" ]; then
+			insertpass
+		elif [ ! -f "$PASSWORD_STORE_DIR/$passprefix$fulladdr.gpg" ]; then
+			getpass
+		fi
+	fi
 }
 
 insertpass() {
 	printf "%s" "$password" | pass insert -fe "$passprefix$fulladdr"
+}
+
+getoauth() {
+	mkdir -p "$oauth2dir"
+	oauth2tokenfile="$oauth2dir/$fulladdr.tokens"
+	[ -f "$oauth2tokenfile" ] && return 0
+	case "$imap" in
+	*gmail*|*google*) oauth2provider="google" ;;
+	*outlook*|*office365*|*microsoft*) oauth2provider="microsoft" ;;
+	*)
+		echo "Could not detect OAuth2 provider from IMAP server '$imap'."
+		echo "OAuth2 is supported for Google and Microsoft."
+		exit 1
+		;;
+	esac
+	echo "OAuth2 setup for $fulladdr"
+	echo "You will need your OAuth2 Client ID and Client Secret."
+	echo "A browser will open for you to authorize the application."
+	echo ""
+	python3 "$oauth2script" "$oauth2tokenfile" \
+		--authorize \
+		--provider "$oauth2provider" \
+		--authflow localhostauthcode \
+		--email "$fulladdr" \
+		--verbose || {
+		echo "OAuth2 authorization failed."
+		rm -f "$oauth2tokenfile"
+		exit 1
+	}
 }
 
 errorexit() {
@@ -221,7 +276,11 @@ getboxes() {
 	if [ -n "${force+x}" ]; then
 		mailboxes="$(printf "INBOX\\nDrafts\\nJunk\\nTrash\\nSent\\nArchive")"
 	else
-		info="$(curl --location-trusted -s -m 5 --user "$login:$(pass "$passprefix$fulladdr")" --url "${protocol:-imaps}://$imap:${iport:-993}")"
+		if [ -n "${oauth2+x}" ]; then
+			info="$(curl --location-trusted -s -m 5 --user "$login" --oauth2-bearer "$(python3 "$oauth2script" "$oauth2tokenfile")" --url "${protocol:-imaps}://$imap:${iport:-993}")"
+		else
+			info="$(curl --location-trusted -s -m 5 --user "$login:$(pass "$passprefix$fulladdr")" --url "${protocol:-imaps}://$imap:${iport:-993}")"
+		fi
 		[ -z "$info" ] && errorexit
 		mailboxes="$(echo "$info" | grep -v HasChildren | sed "s/.*\" //;s/\"//g" | tr -d '\r')"
 	fi
@@ -252,18 +311,19 @@ prepnotmuch() {
 }
 
 togglecron() {
-	cron="$(mktemp)"
-	crontab -l >"$cron"
-	if grep -q mailsync "$cron"; then
-		echo "Removing automatic mailsync..."
-		sed -ibu /mailsync/d "$cron"
-		rm -f "$cron"bu
+	unitdir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+	mkdir -p "$unitdir"
+	if systemctl --user is-enabled mailsync.timer >/dev/null 2>&1; then
+		echo "Disabling automatic mailsync..."
+		systemctl --user disable --now mailsync.timer
 	else
-		echo "Adding automatic mailsync every ${cronmin:-10} minutes..."
-		echo "*/${cronmin:-10} * * * * $prefix/bin/mailsync" >>"$cron"
-	fi &&
-		crontab "$cron"
-	rm -f "$cron"
+		cp "$muttshare/mailsync.service" "$unitdir/"
+		sed "s/OnUnitActiveSec=10min/OnUnitActiveSec=${cronmin:-10}min/" \
+			"$muttshare/mailsync.timer" >"$unitdir/mailsync.timer"
+		systemctl --user daemon-reload
+		systemctl --user enable --now mailsync.timer
+		echo "Automatic mailsync enabled every ${cronmin:-10} minutes."
+	fi
 }
 
 setact() { if [ -n "${action+x}" ] && [ "$action" != "$1" ]; then
@@ -300,6 +360,7 @@ Options allowed with -a:
   -P	Pass Prefix (prefix of the file where password is stored)
   -X	Delete an account's local email too when deleting.
   -o	Configure address, but keep mail online.
+  -O	Use OAuth2 instead of password (for Gmail/Outlook).
   -f	Assume typical English mailboxes without attempting log-on.
 
 NOTE: Once at least one account is added, you can run
@@ -333,7 +394,7 @@ reorder() {
 	' "$tempfile" >>"$muttrc"
 }
 
-while getopts "rfpXlhodTYD:y:i:I:s:S:u:a:n:P:x:m:t:" o; do case "${o}" in
+while getopts "rfpXlhodOTYD:y:i:I:s:S:u:a:n:P:x:m:t:" o; do case "${o}" in
 	l) setact list ;;
 	r) setact reorder ;;
 	d) setact delete ;;
@@ -392,6 +453,10 @@ while getopts "rfpXlhodTYD:y:i:I:s:S:u:a:n:P:x:m:t:" o; do case "${o}" in
 		protocol="pop3s"
 		iport="${iport:-995}"
 		;;
+	O)
+		setact add
+		oauth2=True
+		;;
 	f)
 		setact add
 		force=True
@@ -420,7 +485,13 @@ while getopts "rfpXlhodTYD:y:i:I:s:S:u:a:n:P:x:m:t:" o; do case "${o}" in
 
 case "$action" in
 list) list ;;
-add) checkbasics && askinfo && getboxes && getprofiles && finalize ;;
+add)
+	if [ -n "${oauth2+x}" ]; then
+		checkbasics && askinfo && getoauth && getboxes && getprofiles && finalize
+	else
+		checkbasics && askinfo && getboxes && getprofiles && finalize
+	fi
+	;;
 delete) delete ;;
 sync)
 	echo "\`mw -y\` and \`mw -Y\` are now deprecated and will be removed in a future update. Please switch to using \`mailsync\`."
