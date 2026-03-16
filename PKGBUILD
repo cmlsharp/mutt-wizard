@@ -1,5 +1,5 @@
 pkgname=mutt-wizard-oauth-git
-pkgver=3.3.1.r164.g536f032
+pkgver=3.3.1.r165.g069155f
 pkgrel=1
 pkgdesc="mutt-wizard with OAuth2 support and systemd mailsync timer"
 arch=('any')
@@ -19,9 +19,9 @@ optdepends=(
 )
 provides=('mutt-wizard')
 conflicts=('mutt-wizard')
-_commit=00b86f64b354fca1d973ac2c99b4ed3050b7ac9e
+_commit=069155f4b4853cb3672e336dadcfc3b01b85dc09
 source=("$pkgname-$_commit.tar.gz::https://github.com/cmlsharp/mutt-wizard/archive/$_commit.tar.gz")
-sha256sums=('0c15c83a89b905a5c706feb6114d97fe5d676169ee2aa7ff719847798f8d7f31')
+sha256sums=('45b5e63218db69d50acb18688ffaddc8b41cb54665912499d31bb8a01d4b7377')
 
 pkgver() {
     cd "mutt-wizard-$_commit"
