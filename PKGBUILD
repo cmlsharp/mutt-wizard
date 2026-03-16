@@ -17,18 +17,18 @@ optdepends=(
     'mpop: POP protocol support'
     'pam-gnupg: automatic GPG key unlock on login'
 )
+makedepends=('git')
 provides=('mutt-wizard')
 conflicts=('mutt-wizard')
-_commit=78098aca1295686e443b32ba82ba9a6a649c2934
-source=("$pkgname-$_commit.tar.gz::https://github.com/cmlsharp/mutt-wizard/archive/$_commit.tar.gz")
+source=("git+https://github.com/cmlsharp/mutt-wizard.git")
 sha256sums=('SKIP')
 
 pkgver() {
-    cd "mutt-wizard-$_commit"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "$pkgver"
+    cd mutt-wizard
+    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 package() {
-    cd "mutt-wizard-$_commit"
+    cd mutt-wizard
     make DESTDIR="$pkgdir" PREFIX=/usr install
 }
