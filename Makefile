@@ -19,6 +19,7 @@ install:
 	sed 's:/usr/local:$(PREFIX):' < share/mutt-wizard.muttrc > $(DESTDIR)$(PREFIX)/share/mutt-wizard/mutt-wizard.muttrc
 	sed 's:/usr/local:$(PREFIX):' < share/mailcap > $(DESTDIR)$(PREFIX)/share/mutt-wizard/mailcap
 	sed 's:/usr/local:$(PREFIX):' < bin/mw > $(DESTDIR)$(PREFIX)/bin/mw
+	sed 's:/usr/local:$(PREFIX):' < share/mailsync.service > $(DESTDIR)$(PREFIX)/share/mutt-wizard/mailsync.service
 	sed 's:/usr/local:$(PREFIX):' < mw.1 > $(DESTDIR)$(MANPREFIX)/man1/mw.1
 	chmod 644 $(DESTDIR)$(MANPREFIX)/man1/mw.1 $(DESTDIR)$(MANPREFIX)/man1/mailsync.1
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/mw $(DESTDIR)$(PREFIX)/bin/mailsync $(DESTDIR)$(PREFIX)/lib/mutt-wizard/openfile
